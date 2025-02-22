@@ -1,2 +1,5 @@
-Flask==2.2.2
-APScheduler==3.10.1
+Flask
+APScheduler
+Langchain
+Langchain_openai
+TTKthemes
