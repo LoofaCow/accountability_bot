@@ -3,3 +3,4 @@ APScheduler
 Langchain
 Langchain_openai
 TTKthemes
+plyer

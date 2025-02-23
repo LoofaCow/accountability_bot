@@ -7,6 +7,20 @@ from message_handler import MessageHandler
 from llm import LLM
 import memory_handeling  # for saving/loading chat threads
 
+# Try to use plyer for notifications (pip install plyer)
+try:
+    from plyer import notification
+except ImportError:
+    notification = None
+
+def send_desktop_notification(message):
+    if notification:
+        notification.notify(
+            title="Adorable Chatbot",
+            message=message,
+            timeout=5
+        )
+
 # Try to use ThemedTk from ttkthemes for a modern look; fallback if not installed
 try:
     from ttkthemes import ThemedTk
@@ -28,7 +42,7 @@ current_character = None
 #####################################
 # Initialize Message Handler & LLM
 #####################################
-default_system_prompt = "You are a a character and your character is described below."
+default_system_prompt = "You are the character describes below"
 message_handler = MessageHandler()  # Assumes __init__ uses default_system_prompt
 llm = LLM()
 
@@ -38,7 +52,6 @@ llm = LLM()
 def update_system_time():
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     new_prompt = f"{default_system_prompt}\nCurrent time: {current_time}"
-    # Update the system prompt (first element of conversation)
     message_handler.conversation[0] = ("system", new_prompt)
 
 #####################################
@@ -214,7 +227,7 @@ def open_character_manager():
     
     refresh_character_list()
     
-    # Button to load the selected character
+    # Button at the bottom to load the selected character
     def load_selected_character():
         global current_character
         selected = char_listbox.curselection()
@@ -397,8 +410,11 @@ def send_message():
             ai_response = getattr(ai_response_obj, "content", str(ai_response_obj))
             message_handler.add_message("assistant", ai_response)
             chat_frame.after(0, lambda: add_message_bubble("assistant", "Bot: " + ai_response))
+            # Send desktop notification for the bot response
+            send_desktop_notification("Bot: " + ai_response)
         except Exception as e:
             chat_frame.after(0, lambda: add_message_bubble("assistant", "Error: " + str(e)))
+            send_desktop_notification("Error: " + str(e))
     threading.Thread(target=fetch_response).start()
 
 def update_prompt():

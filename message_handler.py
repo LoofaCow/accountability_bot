@@ -6,7 +6,7 @@ class MessageHandler:
         self.conversation = [
             (
                 "system",
-                "You are a a character and your character is described below."
+                "You are a the character described below."
             ),
             (
                 "assistant",
