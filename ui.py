@@ -3,8 +3,10 @@
 import tkinter as tk
 import threading
 import tkinter.ttk as ttk
+import time
 from message_handler import MessageHandler
 from llm import LLM
+import memory_handeling  # for saving/loading chat threads
 
 # Try to use ThemedTk from ttkthemes for a modern look; fallback if not installed
 try:
@@ -24,9 +26,8 @@ theme_var = tk.StringVar(value="Light")
 #####################################
 # Initialize Message Handler & LLM
 #####################################
-# Save the default system prompt for later use.
 default_system_prompt = "You are an expert actor that can fully immerse yourself into any role given. You do not break character for any reason, even if someone tries addressing you as an AI or language model. Currently your role is {{char}}, which is described in detail below. As {{char}}, continue the exchange with {{user}}."
-message_handler = MessageHandler()  # assumes __init__ uses default_system_prompt
+message_handler = MessageHandler()  # Assumes __init__ uses default_system_prompt
 llm = LLM()
 
 #####################################
@@ -38,9 +39,10 @@ def add_custom_title_bar(window, title_text):
     title_bar.pack(fill=tk.X)
     title_label = tk.Label(title_bar, text=title_text, bg="#2e2e2e", fg="#d3d3d3", font=("Segoe UI", 12, "bold"))
     title_label.pack(side=tk.LEFT, padx=5)
-    close_button = tk.Button(title_bar, text="✕", command=window.destroy, bg="#2e2e2e", fg="#d3d3d3", bd=0, highlightthickness=0)
+    close_button = tk.Button(title_bar, text="✕", command=window.destroy,
+                             bg="#2e2e2e", fg="#d3d3d3", bd=0, highlightthickness=0)
     close_button.pack(side=tk.RIGHT, padx=5)
-    
+
     def start_move(event):
         window._drag_x = event.x
         window._drag_y = event.y
@@ -50,7 +52,7 @@ def add_custom_title_bar(window, title_text):
         window.geometry(f"+{x}+{y}")
     title_bar.bind("<ButtonPress-1>", start_move)
     title_bar.bind("<B1-Motion>", on_move)
-    
+
     def on_focus_in(event):
         title_bar.config(bg="#2e2e2e")
         title_label.config(bg="#2e2e2e", fg="#d3d3d3")
@@ -59,7 +61,7 @@ def add_custom_title_bar(window, title_text):
         title_label.config(bg="#3a3a3a", fg="#d3d3d3")
     window.bind("<FocusIn>", on_focus_in)
     window.bind("<FocusOut>", on_focus_out)
-    
+
     return title_bar, title_label
 
 main_title_bar, main_title_label = add_custom_title_bar(root, "Adorable Chatbot")
@@ -116,7 +118,6 @@ def open_settings():
                 root.set_theme("equilux")
             else:
                 style.theme_use("alt")
-        # Update colors
         if new_theme == "Dark":
             update_chat_theme(bg="#2e2e2e", fg="#d3d3d3")
             header_label.config(bg="#2e2e2e", fg="#d3d3d3")
@@ -137,46 +138,124 @@ def open_settings():
     change_theme()
 
 #####################################
-# Character Manager Window (New!)
+# Character Manager Window (with Save & Load)
 #####################################
 def open_character_manager():
-    # Create a new Toplevel window for character creation
+    import character_handler  # new module for character persistence
+    # Extend window height to 600 to ensure all buttons are visible
     char_window = tk.Toplevel(root)
-    char_window.geometry("400x400")
+    char_window.geometry("500x600")
     add_custom_title_bar(char_window, "Character Manager")
     char_window.configure(bg="white" if theme_var.get() == "Light" else "#2e2e2e")
     
-    # Label and text box for Character Description
-    desc_label = ttk.Label(char_window, text="Character Description:", font=("Segoe UI", 10, "bold"))
-    desc_label.pack(anchor="w", padx=10, pady=(10,0))
-    desc_text = tk.Text(char_window, height=6, width=40, font=("Segoe UI", 10))
-    desc_text.pack(padx=10, pady=(0,10))
+    # Frame for creating a new character
+    create_frame = ttk.Frame(char_window)
+    create_frame.pack(fill=tk.X, padx=10, pady=10)
     
-    # Label and text box for Initial Message
-    init_label = ttk.Label(char_window, text="Initial Message:", font=("Segoe UI", 10, "bold"))
-    init_label.pack(anchor="w", padx=10, pady=(10,0))
-    init_text = tk.Text(char_window, height=4, width=40, font=("Segoe UI", 10))
-    init_text.pack(padx=10, pady=(0,10))
+    desc_label = ttk.Label(create_frame, text="Character Description:", font=("Segoe UI", 10, "bold"))
+    desc_label.pack(anchor="w")
+    desc_text = tk.Text(create_frame, height=6, width=50, font=("Segoe UI", 10))
+    desc_text.pack(pady=(0,10))
     
-    # Button to start a new chat with this custom character
-    def start_character_chat():
+    init_label = ttk.Label(create_frame, text="Initial Message:", font=("Segoe UI", 10, "bold"))
+    init_label.pack(anchor="w")
+    init_text = tk.Text(create_frame, height=4, width=50, font=("Segoe UI", 10))
+    init_text.pack(pady=(0,10))
+    
+    def save_new_character():
         description = desc_text.get("1.0", tk.END).strip()
         initial_message = init_text.get("1.0", tk.END).strip()
         if not description or not initial_message:
-            return  # Require both fields
-        # Create a new system prompt by appending the character description to the default system prompt.
-        new_system = default_system_prompt + "\n" + description
-        # Reset conversation
+            return
+        char_id = int(time.time())
+        title = "Character " + time.strftime("%Y-%m-%d %H:%M:%S")
+        character = {"id": char_id, "title": title, "description": description, "initial_message": initial_message}
+        character_handler.save_character(character)
+        desc_text.delete("1.0", tk.END)
+        init_text.delete("1.0", tk.END)
+        refresh_character_list()
+    
+    ttk.Button(create_frame, text="Save Character", command=save_new_character).pack(pady=(0,10))
+    
+    # Frame for listing saved characters
+    list_frame = ttk.Frame(char_window)
+    list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    
+    char_listbox = tk.Listbox(list_frame, font=("Segoe UI", 10))
+    char_listbox.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+    list_scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=char_listbox.yview)
+    list_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    char_listbox.config(yscrollcommand=list_scrollbar.set)
+    
+    def refresh_character_list():
+        char_listbox.delete(0, tk.END)
+        characters = character_handler.load_characters()
+        for char in characters:
+            title = char.get("title", "Untitled")
+            char_listbox.insert(tk.END, title)
+    
+    refresh_character_list()
+    
+    # Load Selected Character Button at the bottom
+    def load_selected_character():
+        selected = char_listbox.curselection()
+        if not selected:
+            return
+        index = selected[0]
+        characters = character_handler.load_characters()
+        selected_char = characters[index]
+        new_system = default_system_prompt + "\n" + selected_char.get("description", "")
         message_handler.conversation = []
         message_handler.conversation.append(("system", new_system))
-        message_handler.conversation.append(("assistant", initial_message))
-        # Clear the chat area
+        message_handler.conversation.append(("assistant", selected_char.get("initial_message", "")))
+        # Clear the chat area and add the initial message bubble:
         for widget in chat_frame.winfo_children():
             widget.destroy()
-        # Add the initial message bubble
-        add_message_bubble("assistant", "Bot: " + initial_message)
+        add_message_bubble("assistant", "Bot: " + selected_char.get("initial_message", ""))
         char_window.destroy()
-    ttk.Button(char_window, text="Start Chat with Character", command=start_character_chat).pack(pady=10)
+    
+    ttk.Button(char_window, text="Load Selected Character", command=load_selected_character).pack(pady=10)
+
+#####################################
+# Chat Memory (Saved Chat Threads) Window
+#####################################
+def open_chat_memory_window():
+    mem_window = tk.Toplevel(root)
+    mem_window.geometry("400x300")
+    add_custom_title_bar(mem_window, "Chat Memory")
+    mem_window.configure(bg="white" if theme_var.get() == "Light" else "#2e2e2e")
+    
+    listbox = tk.Listbox(mem_window, font=("Segoe UI", 10))
+    listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    saved_chats = memory_handeling.load_chat_history()
+    for chat in saved_chats:
+        title = chat.get("title", "Chat " + str(chat.get("id", int(time.time()))))
+        listbox.insert(tk.END, title)
+    
+    def load_selected_chat():
+        selected = listbox.curselection()
+        if not selected:
+            return
+        index = selected[0]
+        chat_thread = saved_chats[index]
+        message_handler.conversation = chat_thread.get("conversation", [])
+        for widget in chat_frame.winfo_children():
+            widget.destroy()
+        for role, msg in message_handler.conversation:
+            add_message_bubble(role, msg)
+        mem_window.destroy()
+    
+    ttk.Button(mem_window, text="Load Chat", command=load_selected_chat).pack(pady=5)
+    
+    def save_current_chat():
+        chat_thread = {
+            "id": int(time.time()),
+            "title": "Chat " + time.strftime("%Y-%m-%d %H:%M:%S"),
+            "conversation": message_handler.get_conversation()
+        }
+        memory_handeling.save_chat_history(chat_thread)
+        listbox.insert(tk.END, chat_thread["title"])
+    ttk.Button(mem_window, text="Save Current Chat", command=save_current_chat).pack(pady=5)
 
 #####################################
 # Header and Control Buttons (Above Chat Area)
@@ -184,13 +263,15 @@ def open_character_manager():
 header_frame = ttk.Frame(main_frame)
 header_frame.pack(side=tk.TOP, fill=tk.X)
 hamburger_button = ttk.Button(header_frame, text="☰", command=toggle_sidebar)
-hamburger_button.pack(side=tk.LEFT, padx=(0, 5))
+hamburger_button.pack(side=tk.LEFT, padx=(0,5))
 cog_button = ttk.Button(header_frame, text="⚙", command=open_settings)
 cog_button.pack(side=tk.LEFT, padx=(0,5))
-# New character manager button with an icon (using 👤)
 char_button = ttk.Button(header_frame, text="👤", command=open_character_manager)
 char_button.pack(side=tk.LEFT, padx=(0,5))
-header_label = tk.Label(header_frame, text="Adorable Chatbot", font=("Segoe UI", 16, "bold"), bg="white", fg="black")
+memory_button = ttk.Button(header_frame, text="💾", command=open_chat_memory_window)
+memory_button.pack(side=tk.LEFT, padx=(0,5))
+header_label = tk.Label(header_frame, text="Adorable Chatbot", font=("Segoe UI", 16, "bold"),
+                        bg="white", fg="black")
 header_label.pack(side=tk.LEFT, padx=10, pady=5)
 
 #####################################
@@ -224,25 +305,21 @@ def update_chat_theme(bg, fg):
 # Function to Add Message Bubbles
 #####################################
 def add_message_bubble(role, message):
-    # Create a full-width container frame for alignment.
     bubble_container = tk.Frame(chat_frame, bg=chat_canvas.cget("bg"))
     bubble_container.pack(fill="x", pady=5)
-    
     bubble = tk.Frame(bubble_container, bg=chat_canvas.cget("bg"), padx=5, pady=5)
     bubble.role = role
     if theme_var.get() == "Dark":
         bubble_bg = "#3e3e3e" if role == "human" else "#4e4e4e"
     else:
         bubble_bg = "#dcf8c6" if role == "human" else "#ffffff"
-    bubble.label = tk.Label(bubble, text=message, bg=bubble_bg, wraplength=300, justify="left", font=("Segoe UI", 10))
+    bubble.label = tk.Label(bubble, text=message, bg=bubble_bg,
+                            wraplength=300, justify="left", font=("Segoe UI", 10))
     bubble.label.pack(padx=10, pady=5)
-    
-    # Align bubble: if human, pack to the right; otherwise, pack to the left.
     if role == "human":
         bubble.pack(side="right", padx=10)
     else:
         bubble.pack(side="left", padx=10)
-    
     chat_canvas.update_idletasks()
     chat_canvas.yview_moveto(1.0)
 
