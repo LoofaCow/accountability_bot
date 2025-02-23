@@ -23,6 +23,9 @@ root.title("Adorable Chatbot")
 # Global theme variable (Light by default)
 theme_var = tk.StringVar(value="Light")
 
+# Global variable to store the current character (if any)
+current_character = None
+
 #####################################
 # Initialize Message Handler & LLM
 #####################################
@@ -142,15 +145,21 @@ def open_settings():
 #####################################
 def open_character_manager():
     import character_handler  # new module for character persistence
-    # Extend window height to 600 to ensure all buttons are visible
+    # Extend window height to 500x700 to ensure all buttons are visible
     char_window = tk.Toplevel(root)
-    char_window.geometry("500x600")
+    char_window.geometry("500x700")
     add_custom_title_bar(char_window, "Character Manager")
     char_window.configure(bg="white" if theme_var.get() == "Light" else "#2e2e2e")
     
     # Frame for creating a new character
     create_frame = ttk.Frame(char_window)
     create_frame.pack(fill=tk.X, padx=10, pady=10)
+    
+    # New: Character Name field
+    name_label = ttk.Label(create_frame, text="Character Name:", font=("Segoe UI", 10, "bold"))
+    name_label.pack(anchor="w")
+    name_entry = ttk.Entry(create_frame, width=50, font=("Segoe UI", 10))
+    name_entry.pack(pady=(0,10))
     
     desc_label = ttk.Label(create_frame, text="Character Description:", font=("Segoe UI", 10, "bold"))
     desc_label.pack(anchor="w")
@@ -163,14 +172,17 @@ def open_character_manager():
     init_text.pack(pady=(0,10))
     
     def save_new_character():
+        name = name_entry.get().strip()
         description = desc_text.get("1.0", tk.END).strip()
         initial_message = init_text.get("1.0", tk.END).strip()
         if not description or not initial_message:
             return
+        if not name:
+            name = "Character " + time.strftime("%Y-%m-%d %H:%M:%S")
         char_id = int(time.time())
-        title = "Character " + time.strftime("%Y-%m-%d %H:%M:%S")
-        character = {"id": char_id, "title": title, "description": description, "initial_message": initial_message}
+        character = {"id": char_id, "title": name, "description": description, "initial_message": initial_message}
         character_handler.save_character(character)
+        name_entry.delete(0, tk.END)
         desc_text.delete("1.0", tk.END)
         init_text.delete("1.0", tk.END)
         refresh_character_list()
@@ -180,7 +192,6 @@ def open_character_manager():
     # Frame for listing saved characters
     list_frame = ttk.Frame(char_window)
     list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-    
     char_listbox = tk.Listbox(list_frame, font=("Segoe UI", 10))
     char_listbox.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
     list_scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=char_listbox.yview)
@@ -196,19 +207,21 @@ def open_character_manager():
     
     refresh_character_list()
     
-    # Load Selected Character Button at the bottom
+    # Button at the bottom to load the selected character
     def load_selected_character():
+        global current_character
         selected = char_listbox.curselection()
         if not selected:
             return
         index = selected[0]
         characters = character_handler.load_characters()
         selected_char = characters[index]
+        # Save the selected character globally
+        current_character = selected_char
         new_system = default_system_prompt + "\n" + selected_char.get("description", "")
         message_handler.conversation = []
         message_handler.conversation.append(("system", new_system))
         message_handler.conversation.append(("assistant", selected_char.get("initial_message", "")))
-        # Clear the chat area and add the initial message bubble:
         for widget in chat_frame.winfo_children():
             widget.destroy()
         add_message_bubble("assistant", "Bot: " + selected_char.get("initial_message", ""))
@@ -228,6 +241,10 @@ def open_chat_memory_window():
     listbox = tk.Listbox(mem_window, font=("Segoe UI", 10))
     listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
     saved_chats = memory_handeling.load_chat_history()
+    # If a character is currently loaded, filter chats by that character id.
+    global current_character
+    if current_character is not None:
+        saved_chats = [chat for chat in saved_chats if chat.get("character_id") == current_character.get("id")]
     for chat in saved_chats:
         title = chat.get("title", "Chat " + str(chat.get("id", int(time.time()))))
         listbox.insert(tk.END, title)
@@ -251,7 +268,9 @@ def open_chat_memory_window():
         chat_thread = {
             "id": int(time.time()),
             "title": "Chat " + time.strftime("%Y-%m-%d %H:%M:%S"),
-            "conversation": message_handler.get_conversation()
+            "conversation": message_handler.get_conversation(),
+            "character_id": current_character.get("id") if current_character else None,
+            "character_title": current_character.get("title") if current_character else "Default"
         }
         memory_handeling.save_chat_history(chat_thread)
         listbox.insert(tk.END, chat_thread["title"])
