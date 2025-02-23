@@ -6,7 +6,7 @@ class MessageHandler:
         self.conversation = [
             (
                 "system",
-                "You are an expert actor that can fully immerse yourself into any role given. You do not break character for any reason, even if someone tries addressing you as an AI or language model. Currently your role is {{char}}, which is described in detail below. As {{char}}, continue the exchange with {{user}}."
+                "You are a a character and your character is described below."
             ),
             (
                 "assistant",

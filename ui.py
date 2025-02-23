@@ -1,9 +1,8 @@
-# ui.py
-
 import tkinter as tk
 import threading
 import tkinter.ttk as ttk
 import time
+import datetime  # For current time
 from message_handler import MessageHandler
 from llm import LLM
 import memory_handeling  # for saving/loading chat threads
@@ -29,9 +28,18 @@ current_character = None
 #####################################
 # Initialize Message Handler & LLM
 #####################################
-default_system_prompt = "You are an expert actor that can fully immerse yourself into any role given. You do not break character for any reason, even if someone tries addressing you as an AI or language model. Currently your role is {{char}}, which is described in detail below. As {{char}}, continue the exchange with {{user}}."
+default_system_prompt = "You are a a character and your character is described below."
 message_handler = MessageHandler()  # Assumes __init__ uses default_system_prompt
 llm = LLM()
+
+#####################################
+# Function: Update System Time in Prompt
+#####################################
+def update_system_time():
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    new_prompt = f"{default_system_prompt}\nCurrent time: {current_time}"
+    # Update the system prompt (first element of conversation)
+    message_handler.conversation[0] = ("system", new_prompt)
 
 #####################################
 # Custom Title Bar (for windows)
@@ -141,13 +149,12 @@ def open_settings():
     change_theme()
 
 #####################################
-# Character Manager Window (with Save & Load)
+# Character Manager Window (with Save, List & Load)
 #####################################
 def open_character_manager():
     import character_handler  # new module for character persistence
-    # Extend window height to 500x700 to ensure all buttons are visible
     char_window = tk.Toplevel(root)
-    char_window.geometry("500x700")
+    char_window.geometry("500x700")  # extended height
     add_custom_title_bar(char_window, "Character Manager")
     char_window.configure(bg="white" if theme_var.get() == "Light" else "#2e2e2e")
     
@@ -155,7 +162,7 @@ def open_character_manager():
     create_frame = ttk.Frame(char_window)
     create_frame.pack(fill=tk.X, padx=10, pady=10)
     
-    # New: Character Name field
+    # Character Name field
     name_label = ttk.Label(create_frame, text="Character Name:", font=("Segoe UI", 10, "bold"))
     name_label.pack(anchor="w")
     name_entry = ttk.Entry(create_frame, width=50, font=("Segoe UI", 10))
@@ -207,7 +214,7 @@ def open_character_manager():
     
     refresh_character_list()
     
-    # Button at the bottom to load the selected character
+    # Button to load the selected character
     def load_selected_character():
         global current_character
         selected = char_listbox.curselection()
@@ -216,8 +223,7 @@ def open_character_manager():
         index = selected[0]
         characters = character_handler.load_characters()
         selected_char = characters[index]
-        # Save the selected character globally
-        current_character = selected_char
+        current_character = selected_char  # Set current character globally
         new_system = default_system_prompt + "\n" + selected_char.get("description", "")
         message_handler.conversation = []
         message_handler.conversation.append(("system", new_system))
@@ -241,7 +247,6 @@ def open_chat_memory_window():
     listbox = tk.Listbox(mem_window, font=("Segoe UI", 10))
     listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
     saved_chats = memory_handeling.load_chat_history()
-    # If a character is currently loaded, filter chats by that character id.
     global current_character
     if current_character is not None:
         saved_chats = [chat for chat in saved_chats if chat.get("character_id") == current_character.get("id")]
@@ -382,6 +387,9 @@ def send_message():
     message_handler.add_message("human", user_input)
     add_message_bubble("human", "You: " + user_input)
     entry.delete(0, tk.END)
+    
+    # Update system prompt with current time before fetching response
+    update_system_time()
     
     def fetch_response():
         try:
